@@ -12,6 +12,7 @@ from langchain_groq import ChatGroq
 load_dotenv()
 
 app = FastAPI()
+# ---------- Initialize Global Components ----------
 
 # Embedding model
 embeddings = HuggingFaceEmbeddings(
@@ -30,14 +31,18 @@ llm = ChatGroq(
     groq_api_key=os.getenv("GROQ_API_KEY")
 )
 
+# ---------- Request Model ----------
+
 
 class QuestionRequest(BaseModel):
     question: str
 
-
+    # ---------- Upload Endpoint ----------
 # ---------------------------
 # Upload PDF
 # ---------------------------
+
+
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
 
@@ -58,10 +63,12 @@ async def upload_file(file: UploadFile = File(...)):
 
     return {"message": "Document uploaded successfully"}
 
-
+    # ---------- RAG Question Endpoint ----------
 # ---------------------------
 # Ask Question
 # ---------------------------
+
+
 @app.post("/ask")
 def ask_question(request: QuestionRequest):
 
