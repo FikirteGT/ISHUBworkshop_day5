@@ -163,11 +163,3 @@ Feel free to open issues or submit pull requests.
 This project is licensed under the MIT License.
 
 ---
-
-## ⭐ Acknowledgements
-
-* LangChain
-* ChromaDB
-* Groq
-* HuggingFace
-* Streamlit
