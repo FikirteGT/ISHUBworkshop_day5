@@ -13,18 +13,18 @@ load_dotenv()
 
 app = FastAPI()
 
+# Embedding model
 embeddings = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
 
+# Vector database
 db = Chroma(
     persist_directory="./chroma_db",
     embedding_function=embeddings
 )
 
-# Remove the global retriever from startup
-# retriever will be created inside /ask to always get latest docs
-
+# LLM
 llm = ChatGroq(
     model_name="llama-3.1-8b-instant",
     groq_api_key=os.getenv("GROQ_API_KEY")
@@ -35,6 +35,9 @@ class QuestionRequest(BaseModel):
     question: str
 
 
+# ---------------------------
+# Upload PDF
+# ---------------------------
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
 
@@ -56,29 +59,42 @@ async def upload_file(file: UploadFile = File(...)):
     return {"message": "Document uploaded successfully"}
 
 
+# ---------------------------
+# Ask Question
+# ---------------------------
 @app.post("/ask")
 def ask_question(request: QuestionRequest):
 
-    # Create a new retriever here every time to include the latest uploaded PDFs
-    retriever = db.as_retriever(search_kwargs={"k": 3})
+    # 1. Retrieve relevant chunks
+    docs = db.similarity_search(request.question, k=3)
 
-    docs = retriever.invoke(request.question)
+    if not docs:
+        return {"question": request.question, "answer": "No relevant documents found in the database."}
 
-    context = ""
-    for i, d in enumerate(docs):
-        context += f"Source {i+1}:\n{d.page_content}\n\n"
+    # 2. Format the context from retrieved docs
+    context_text = "\n\n---\n\n".join(
+        [f"Source {i+1}:\n{d.page_content}" for i, d in enumerate(docs)])
 
-    prompt = f"""
-Answer only from the sources below.
-If the answer is not in the document say: Not in document.
+    # 3. Use a cleaner prompt structure
+    system_prompt = (
+        "You are a document assistant. Answer the user's question using ONLY the provided sources. "
+        "If the answer is not in the sources, say 'Not in document'. "
+        "Always cite the source numbers used in your answer."
+    )
 
-{context}
+    user_prompt = f"Context:\n{context_text}\n\nQuestion: {request.question}"
 
-Question: {request.question}
-"""
+    # 4. Invoke the LLM (Using a list of messages is more reliable for Llama 3)
+    from langchain_core.messages import SystemMessage, HumanMessage
 
-    response = llm.invoke(prompt)
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt),
+    ]
+
+    response = llm.invoke(messages)
 
     return {
+        "question": request.question,
         "answer": response.content
     }
